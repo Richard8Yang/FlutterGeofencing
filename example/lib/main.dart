@@ -71,7 +71,9 @@ class _MyAppState extends State<MyApp> {
     initPlatformState();
 
     mapProvider.loadProviders().then((val) {
-      setState(() {});
+      setState(() {
+        currentMapProviderName = "OpenStreetMap.CH";
+      });
     });
 
     polyline = Polyline(
@@ -237,9 +239,8 @@ class _MyAppState extends State<MyApp> {
                         child: Text(
                           e.name,
                           style: TextStyle(
-                              color: e.auth.isNotEmpty
-                                  ? Colors.red
-                                  : Colors.green,
+                              color:
+                                  e.auth.isNotEmpty ? Colors.red : Colors.green,
                               backgroundColor: e.name == currentMapProviderName
                                   ? Colors.blueGrey
                                   : Colors.transparent),
@@ -254,7 +255,7 @@ class _MyAppState extends State<MyApp> {
                   });
                 },
               ),
-              if (currentMapProviderName != null)
+              if (currentMapProviderName != null && curProv != null)
                 Expanded(
                   child: FlutterMap(
                     options: MapOptions(
