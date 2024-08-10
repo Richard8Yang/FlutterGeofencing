@@ -45,7 +45,7 @@ class _MyAppState extends State<MyApp> {
     GeofenceEvent.exit
   ];
 
-  String? currentMapProvider;
+  String? currentMapProviderName;
   final mapProvider = MapProvider();
   late Polyline polyline;
 
@@ -78,9 +78,9 @@ class _MyAppState extends State<MyApp> {
       points: <LatLng>[],
       strokeWidth: 4.0,
       color: Colors.blue,
-      pattern: const StrokePattern.dotted(
-        spacingFactor: 2,
-      ),
+      pattern: const StrokePattern.solid(
+          //spacingFactor: 2,
+          ),
       borderStrokeWidth: 2,
       borderColor: Colors.blue.withOpacity(0.5),
     );
@@ -97,8 +97,8 @@ class _MyAppState extends State<MyApp> {
           polyline.points.add(LatLng(latitude, longitude));
         }
       });
+      Future.delayed(Duration(seconds: 5), updateCurrentLocation);
     });
-    Future.delayed(Duration(seconds: 5), updateCurrentLocation);
   }
 
   static void callback(List<String> ids, Location l, GeofenceEvent e) async {
@@ -135,6 +135,9 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    final curProv = currentMapProviderName != null
+        ? mapProvider.findProviderByName(currentMapProviderName!)
+        : null;
     return MaterialApp(
       home: Scaffold(
         appBar: AppBar(
@@ -225,7 +228,8 @@ class _MyAppState extends State<MyApp> {
               Text("Distance: ${calculateDistanceFromCenter()} m"),
               DropdownButton(
                 isExpanded: true,
-                value: currentMapProvider ?? mapProvider.currentProvider,
+                value:
+                    currentMapProviderName ?? mapProvider.currentProviderName,
                 items: mapProvider.providersList
                     .map(
                       (e) => DropdownMenuItem<String>(
@@ -233,10 +237,10 @@ class _MyAppState extends State<MyApp> {
                         child: Text(
                           e.name,
                           style: TextStyle(
-                              color: e.authInfo.authRequired
+                              color: e.auth.isNotEmpty
                                   ? Colors.red
                                   : Colors.green,
-                              backgroundColor: e.name == currentMapProvider
+                              backgroundColor: e.name == currentMapProviderName
                                   ? Colors.blueGrey
                                   : Colors.transparent),
                         ),
@@ -246,23 +250,23 @@ class _MyAppState extends State<MyApp> {
                 onChanged: (String? name) {
                   setState(() {
                     if (name == null) return;
-                    currentMapProvider = name;
+                    currentMapProviderName = name;
                   });
                 },
               ),
-              if (currentMapProvider != null)
+              if (currentMapProviderName != null)
                 Expanded(
                   child: FlutterMap(
                     options: MapOptions(
                       initialCenter: LatLng(latitude, longitude),
-                      initialZoom: 10,
+                      initialZoom: 15,
                       interactionOptions: InteractionOptions(),
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate:
-                            mapProvider.findProviderByName(currentMapProvider!),
-                        userAgentPackageName: 'com.example.app',
+                        urlTemplate: curProv!.url,
+                        userAgentPackageName: 'com.rpy.app',
+                        additionalOptions: curProv.params,
                       ),
                       PolylineLayer(polylines: [polyline]),
                     ],

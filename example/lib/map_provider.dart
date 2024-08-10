@@ -1,34 +1,23 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-class MapAuthInfo {
-  final String? apiKey;
-  final String? appId;
-  final String? appCode;
-
-  get authRequired => apiKey != null || appId != null || appCode != null;
-
-  MapAuthInfo({this.apiKey, this.appId, this.appCode});
-}
-
 class MapTileProvider extends Object {
   final String name;
-  final String attribution;
-  final String htmlAttribution;
   final String url;
   final int maxZoom;
   final int minZoom;
-  final MapAuthInfo authInfo;
+  final Map<String, String> params;
+  final Map<String, String> auth;
 
   MapTileProvider({
     required this.name,
-    required this.attribution,
-    required this.htmlAttribution,
     required this.url,
-    required this.authInfo,
     required this.maxZoom,
     required this.minZoom,
+    required this.params,
+    required this.auth,
   });
 }
 
@@ -43,13 +32,13 @@ class MapProvider {
 
   List<MapTileProvider> get providersList => availableProviders;
 
-  String get currentProvider =>
+  String get currentProviderName =>
       availableProviders.isEmpty ? "" : availableProviders.first.name;
 
-  String? findProviderByName(String name) {
+  MapTileProvider? findProviderByName(String name) {
     for (final provider in availableProviders) {
       if (provider.name == name) {
-        return provider.url;
+        return provider;
       }
     }
     return null;
@@ -87,31 +76,54 @@ class MapProvider {
         } else {
           final name = provider['name'] as String;
           final url = provider['url'] as String;
-          final attribution = provider['attribution'] as String;
-          final htmlAttribution = provider['html_attribution'] as String;
           final maxZoom = provider['max_zoom'] as int? ?? 22;
           final minZoom = provider['min_zoom'] as int? ?? 0;
+          final params = Map<String, String>();
+          final auth = Map<String, String>();
 
-          final apiKey = provider['apiKey'] as String?;
-          final appId = provider['app_id'] as String?;
-          final appCode = provider['app_code'] as String?;
-          final authInfo = MapAuthInfo(
-            apiKey: apiKey,
-            appId: appId,
-            appCode: appCode,
-          );
+          const authFields = [
+            'apiKey',
+            'app_id',
+            'app_code',
+            'accessToken',
+            'key'
+          ];
+          for (final field in authFields) {
+            if (provider.containsKey(field)) {
+              auth[field] = provider[field] as String;
+            } else if (url.contains(field)) {
+              auth[field] = "<insert your $field here>";
+            }
+          }
+          for (final field in provider.keys) {
+            if (field != 'name' && field != 'url') {
+              if (authFields.contains(field)) {
+                auth[field] = provider[field] as String;
+              } else {
+                params[field] = provider[field] is String
+                    ? provider[field]
+                    : provider[field].toString();
+              }
+            }
+          }
 
           availableProviders.add(MapTileProvider(
             name: name,
             url: url,
-            attribution: attribution,
-            htmlAttribution: htmlAttribution,
             maxZoom: maxZoom,
             minZoom: minZoom,
-            authInfo: authInfo,
+            params: params,
+            auth: auth,
           ));
         }
       }
     }
+
+    availableProviders.sort((provider1, provider2) {
+      final needSort = provider1.auth.isEmpty == provider2.auth.isEmpty;
+      return needSort
+          ? provider1.name.compareTo(provider2.name)
+          : (provider2.auth.isEmpty ? 1 : -1);
+    });
   }
 }
