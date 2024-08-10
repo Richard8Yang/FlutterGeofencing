@@ -11,6 +11,9 @@ import 'package:flutter/material.dart';
 
 import 'package:geofencing/geofencing.dart';
 import 'package:geofencing_example/location_svc.dart';
+import 'package:geofencing_example/map_provider.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 void main() => runApp(MyApp());
 
@@ -20,22 +23,6 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  String geofenceState = 'N/A';
-  List<String> registeredGeofences = [];
-  double latitude = 37.419851;
-  double longitude = -122.078818;
-  double radius = 1.0;
-
-  double regLat = 0;
-  double regLng = 0;
-
-  ReceivePort port = ReceivePort();
-  final List<GeofenceEvent> triggers = <GeofenceEvent>[
-    GeofenceEvent.enter,
-    GeofenceEvent.dwell,
-    GeofenceEvent.exit
-  ];
-
   final AndroidGeofencingSettings androidSettings = AndroidGeofencingSettings(
       initialTrigger: <GeofenceEvent>[
         GeofenceEvent.enter,
@@ -44,11 +31,37 @@ class _MyAppState extends State<MyApp> {
       ],
       loiteringDelay: 1000 * 60);
 
+  String geofenceState = 'N/A';
+  double latitude = 37.419851;
+  double longitude = -122.078818;
+  ReceivePort port = ReceivePort();
+  double radius = 100;
+  double regLat = 0;
+  double regLng = 0;
+  List<String> registeredGeofences = [];
+  final List<GeofenceEvent> triggers = <GeofenceEvent>[
+    GeofenceEvent.enter,
+    GeofenceEvent.dwell,
+    GeofenceEvent.exit
+  ];
+
+  String? currentMapProvider;
+  final mapProvider = MapProvider();
+  late Polyline polyline;
+
   @override
   void initState() {
     super.initState();
-    IsolateNameServer.registerPortWithName(
+    bool succ = IsolateNameServer.registerPortWithName(
         port.sendPort, 'geofencing_send_port');
+    if (!succ) {
+      IsolateNameServer.removePortNameMapping('geofencing_send_port');
+      succ = IsolateNameServer.registerPortWithName(
+          port.sendPort, 'geofencing_send_port');
+      if (!succ) {
+        print('Failed to register isolate name server!');
+      }
+    }
     port.listen((dynamic data) {
       print('Event: $data');
       setState(() {
@@ -56,6 +69,21 @@ class _MyAppState extends State<MyApp> {
       });
     });
     initPlatformState();
+
+    mapProvider.loadProviders().then((val) {
+      setState(() {});
+    });
+
+    polyline = Polyline(
+      points: <LatLng>[],
+      strokeWidth: 4.0,
+      color: Colors.blue,
+      pattern: const StrokePattern.dotted(
+        spacingFactor: 2,
+      ),
+      borderStrokeWidth: 2,
+      borderColor: Colors.blue.withOpacity(0.5),
+    );
 
     updateCurrentLocation();
   }
@@ -65,9 +93,12 @@ class _MyAppState extends State<MyApp> {
       setState(() {
         latitude = pos.latitude;
         longitude = pos.longitude;
+        if (registeredGeofences.isNotEmpty) {
+          polyline.points.add(LatLng(latitude, longitude));
+        }
       });
     });
-    Future.delayed(Duration(seconds: 10), updateCurrentLocation);
+    Future.delayed(Duration(seconds: 5), updateCurrentLocation);
   }
 
   static void callback(List<String> ids, Location l, GeofenceEvent e) async {
@@ -112,7 +143,7 @@ class _MyAppState extends State<MyApp> {
         body: Container(
           padding: const EdgeInsets.all(20.0),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
               Text('Current state: $geofenceState'),
               Center(
@@ -121,6 +152,7 @@ class _MyAppState extends State<MyApp> {
                   onPressed: () {
                     regLat = latitude;
                     regLng = longitude;
+                    geofenceState = "N/A";
                     GeofencingManager.registerGeofence(
                             GeofenceRegion(
                                 'mtv', regLat, regLng, radius, triggers,
@@ -132,6 +164,7 @@ class _MyAppState extends State<MyApp> {
                             .then((value) {
                           setState(() {
                             registeredGeofences = value;
+                            polyline.points.clear();
                           });
                         });
                       },
@@ -190,6 +223,51 @@ class _MyAppState extends State<MyApp> {
                 },
               ),
               Text("Distance: ${calculateDistanceFromCenter()} m"),
+              DropdownButton(
+                isExpanded: true,
+                value: currentMapProvider ?? mapProvider.currentProvider,
+                items: mapProvider.providersList
+                    .map(
+                      (e) => DropdownMenuItem<String>(
+                        value: e.name,
+                        child: Text(
+                          e.name,
+                          style: TextStyle(
+                              color: e.authInfo.authRequired
+                                  ? Colors.red
+                                  : Colors.green,
+                              backgroundColor: e.name == currentMapProvider
+                                  ? Colors.blueGrey
+                                  : Colors.transparent),
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (String? name) {
+                  setState(() {
+                    if (name == null) return;
+                    currentMapProvider = name;
+                  });
+                },
+              ),
+              if (currentMapProvider != null)
+                Expanded(
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: LatLng(latitude, longitude),
+                      initialZoom: 10,
+                      interactionOptions: InteractionOptions(),
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            mapProvider.findProviderByName(currentMapProvider!),
+                        userAgentPackageName: 'com.example.app',
+                      ),
+                      PolylineLayer(polylines: [polyline]),
+                    ],
+                  ),
+                )
             ],
           ),
         ),
