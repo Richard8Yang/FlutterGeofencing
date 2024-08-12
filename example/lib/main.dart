@@ -24,12 +24,13 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final AndroidGeofencingSettings androidSettings = AndroidGeofencingSettings(
-      initialTrigger: <GeofenceEvent>[
-        GeofenceEvent.enter,
-        GeofenceEvent.exit,
-        GeofenceEvent.dwell
-      ],
-      loiteringDelay: 1000 * 60);
+    initialTrigger: <GeofenceEvent>[
+      GeofenceEvent.enter,
+      GeofenceEvent.exit,
+      GeofenceEvent.dwell
+    ],
+    loiteringDelay: 1000 * 60,
+  );
 
   String geofenceState = 'N/A';
   double latitude = 37.419851;
@@ -49,6 +50,7 @@ class _MyAppState extends State<MyApp> {
   final mapProvider = MapProvider();
   late Polyline polyline;
 
+  @pragma('vm:entry-point')
   @override
   void initState() {
     super.initState();
@@ -103,6 +105,7 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
+  @pragma('vm:entry-point')
   static void callback(List<String> ids, Location l, GeofenceEvent e) async {
     print('Fences: $ids Location $l Event: $e');
     final send = IsolateNameServer.lookupPortByName('geofencing_send_port');
