@@ -32,11 +32,10 @@ class _MyAppState extends State<MyApp> {
     loiteringDelay: 1000 * 60,
   );
 
-  String geofenceState = 'N/A';
   double latitude = 37.419851;
   double longitude = -122.078818;
   ReceivePort port = ReceivePort();
-  double radius = 100;
+  double radius = 200;
   double regLat = 0;
   double regLng = 0;
   List<String> registeredGeofences = [];
@@ -49,6 +48,8 @@ class _MyAppState extends State<MyApp> {
   String? currentMapProviderName;
   final mapProvider = MapProvider();
   late Polyline polyline;
+
+  List<String> logs = [];
 
   @pragma('vm:entry-point')
   @override
@@ -64,10 +65,27 @@ class _MyAppState extends State<MyApp> {
         print('Failed to register isolate name server!');
       }
     }
-    port.listen((dynamic data) {
-      print('Event: $data');
+    port.listen((data) {
       setState(() {
-        geofenceState = data;
+        updateCurrentLocation();
+        // get current time
+        final now = DateTime.now();
+        final ids = data['ids']; // as List<String>;
+        final event = data['event'] as String;
+        //latitude = data['latitude'] as double;
+        //longitude = data['longitude'] as double;
+        final distance =
+            calculateDistanceFromCenter(loc: LatLng(latitude, longitude));
+        if (event == GeofenceEvent.enter.toString()) {
+          logs.add(
+              "[$now] Enter fence ${ids} [$latitude,$longitude] $distance");
+        } else if (event == GeofenceEvent.exit.toString()) {
+          logs.add(
+              "[$now] Leave fence ${ids} [$latitude,$longitude] $distance");
+        } else if (event == GeofenceEvent.dwell.toString()) {
+          logs.add(
+              "[$now] Stay in fence ${ids} [$latitude,$longitude] $distance");
+        }
       });
     });
     initPlatformState();
@@ -99,9 +117,11 @@ class _MyAppState extends State<MyApp> {
         longitude = pos.longitude;
         if (registeredGeofences.isNotEmpty) {
           polyline.points.add(LatLng(latitude, longitude));
+          print(
+              "[${DateTime.now()}] distance: ${calculateDistanceFromCenter()}");
         }
       });
-      Future.delayed(Duration(seconds: 5), updateCurrentLocation);
+      //Future.delayed(Duration(seconds: 10), updateCurrentLocation);
     });
   }
 
@@ -109,7 +129,13 @@ class _MyAppState extends State<MyApp> {
   static void callback(List<String> ids, Location l, GeofenceEvent e) async {
     print('Fences: $ids Location $l Event: $e');
     final send = IsolateNameServer.lookupPortByName('geofencing_send_port');
-    send?.send(e.toString());
+    final data = {
+      'ids': List.from(ids),
+      'latitude': l.latitude,
+      'longitude': l.longitude,
+      'event': e.toString(),
+    };
+    send?.send(data);
   }
 
   // Platform messages are asynchronous, so we initialize in an async method.
@@ -134,8 +160,10 @@ class _MyAppState extends State<MyApp> {
     return 1000 * 2 * r * math.asin(math.sqrt(a)); // in meters
   }
 
-  double calculateDistanceFromCenter() {
-    return calculateDistance(latitude, longitude, regLat, regLng);
+  double calculateDistanceFromCenter({LatLng? loc}) {
+    return loc != null
+        ? calculateDistance(loc.latitude, loc.longitude, regLat, regLng)
+        : calculateDistance(latitude, longitude, regLat, regLng);
   }
 
   @override
@@ -149,88 +177,10 @@ class _MyAppState extends State<MyApp> {
           title: const Text('Flutter Geofencing Example'),
         ),
         body: Container(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(10.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             children: <Widget>[
-              Text('Current state: $geofenceState'),
-              Center(
-                child: ElevatedButton(
-                  child: const Text('Register'),
-                  onPressed: () {
-                    regLat = latitude;
-                    regLng = longitude;
-                    geofenceState = "N/A";
-                    GeofencingManager.registerGeofence(
-                            GeofenceRegion(
-                                'mtv', regLat, regLng, radius, triggers,
-                                androidCfg: androidSettings),
-                            callback)
-                        .then(
-                      (_) {
-                        GeofencingManager.getRegisteredGeofenceIds()
-                            .then((value) {
-                          setState(() {
-                            registeredGeofences = value;
-                            polyline.points.clear();
-                          });
-                        });
-                      },
-                    );
-                  },
-                ),
-              ),
-              Text('Registered Geofences: $registeredGeofences'),
-              Text('Geofence center: ($regLat, $regLng)'),
-              Center(
-                child: ElevatedButton(
-                  child: const Text('Unregister'),
-                  onPressed: () =>
-                      GeofencingManager.removeGeofenceById('mtv').then((_) {
-                    GeofencingManager.getRegisteredGeofenceIds().then((value) {
-                      setState(() {
-                        registeredGeofences = value;
-                      });
-                    });
-                  }),
-                ),
-              ),
-              TextField(
-                decoration: const InputDecoration(
-                  hintText: 'Latitude',
-                ),
-                keyboardType: TextInputType.number,
-                controller: TextEditingController(text: latitude.toString()),
-                onChanged: (String s) {
-                  latitude = double.tryParse(s) ?? 0.0;
-                },
-                onTapOutside: (event) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                },
-              ),
-              TextField(
-                decoration: const InputDecoration(hintText: 'Longitude'),
-                keyboardType: TextInputType.number,
-                controller: TextEditingController(text: longitude.toString()),
-                onChanged: (String s) {
-                  longitude = double.tryParse(s) ?? 0.0;
-                },
-                onTapOutside: (event) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                },
-              ),
-              TextField(
-                decoration: const InputDecoration(hintText: 'Radius'),
-                keyboardType: TextInputType.number,
-                controller: TextEditingController(text: radius.toString()),
-                onChanged: (String s) {
-                  radius = double.tryParse(s) ?? 0.0;
-                },
-                onTapOutside: (event) {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                },
-              ),
-              Text("Distance: ${calculateDistanceFromCenter()} m"),
               DropdownButton(
                 isExpanded: true,
                 value:
@@ -268,14 +218,133 @@ class _MyAppState extends State<MyApp> {
                     ),
                     children: [
                       TileLayer(
-                        urlTemplate: curProv!.url,
+                        urlTemplate: curProv.url,
                         userAgentPackageName: 'com.rpy.app',
                         additionalOptions: curProv.params,
                       ),
                       PolylineLayer(polylines: [polyline]),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: LatLng(latitude, longitude),
+                            width: 24,
+                            height: 24,
+                            alignment: Alignment.topCenter,
+                            child: Icon(
+                              Icons.arrow_downward_rounded,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                          Marker(
+                            point: LatLng(regLat, regLng),
+                            width: 24,
+                            height: 24,
+                            alignment: Alignment.topCenter,
+                            child: Icon(
+                              Icons.arrow_downward_rounded,
+                              color: Colors.greenAccent,
+                            ),
+                          ),
+                        ],
+                      )
                     ],
                   ),
-                )
+                ),
+              Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Text("Radius: "),
+                    Expanded(
+                      child: TextField(
+                        decoration: const InputDecoration(hintText: 'Radius'),
+                        keyboardType: TextInputType.number,
+                        controller: TextEditingController(
+                            text: radius.toInt().toString()),
+                        onChanged: (String s) {
+                          radius = double.tryParse(s) ?? 0.0;
+                        },
+                        onTapOutside: (event) {
+                          FocusManager.instance.primaryFocus?.unfocus();
+                        },
+                      ),
+                    ),
+                    Text(" m  "),
+                    ElevatedButton(
+                      child: const Icon(Icons.gps_fixed),
+                      onPressed: () => updateCurrentLocation(),
+                    ),
+                    ElevatedButton(
+                      child: const Icon(Icons.login), //Text('Register'),
+                      onPressed: () {
+                        LocationService().getCurrentLocation().then((pos) {
+                          regLat = latitude;
+                          regLng = longitude;
+                          GeofencingManager.registerGeofence(
+                                  GeofenceRegion(
+                                      'mtv', regLat, regLng, radius, triggers,
+                                      androidCfg: androidSettings),
+                                  callback)
+                              .then(
+                            (_) {
+                              GeofencingManager.getRegisteredGeofenceIds()
+                                  .then((value) {
+                                setState(() {
+                                  registeredGeofences = value;
+                                  polyline.points.clear();
+                                  logs.add(
+                                      "[${DateTime.now()}] Register fence $value [$regLat,$regLng] $radius");
+                                });
+                              });
+                            },
+                          );
+                        });
+                      },
+                    ),
+                    ElevatedButton(
+                      child: const Icon(Icons.logout), //Text('Unregister'),
+                      onPressed: () =>
+                          GeofencingManager.removeGeofenceById('mtv').then((_) {
+                        GeofencingManager.getRegisteredGeofenceIds()
+                            .then((value) {
+                          setState(() {
+                            registeredGeofences = value;
+                            logs.add(
+                                "[${DateTime.now()}] Unregister fence mtv");
+                          });
+                        });
+                      }),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(
+                    color: Colors.black,
+                    style: BorderStyle.solid,
+                    width: 1.0,
+                  ),
+                  //color: Color(0xFFF05A22),
+                  borderRadius: BorderRadius.circular(5.0),
+                ),
+                height: 250,
+                child: ListView.builder(
+                  padding: EdgeInsets.all(0.0),
+                  itemExtent: 20,
+                  itemCount: logs.length,
+                  itemBuilder: (context, index) {
+                    return ListTile(
+                      title: Text(
+                        logs[index],
+                        style: TextStyle(fontSize: 8),
+                        //maxLines: 1,
+                      ),
+                    );
+                  },
+                ),
+              ),
+              SizedBox(height: 20),
             ],
           ),
         ),
