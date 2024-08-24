@@ -145,6 +145,7 @@ static BOOL backgroundIsolateRun = NO;
   [_locationManager setDelegate:self];
   [_locationManager requestAlwaysAuthorization];
   _locationManager.allowsBackgroundLocationUpdates = YES;
+  _locationManager.pausesLocationUpdatesAutomatically = NO;
 
   _headlessRunner = [[FlutterEngine alloc] initWithName:@"GeofencingIsolate" project:nil allowHeadlessExecution:YES];
   _registrar = registrar;
