@@ -113,8 +113,8 @@ class _MyAppState extends State<MyApp> {
   void updateCurrentLocation() {
     LocationService().getCurrentLocation().then((pos) {
       setState(() {
-        latitude = pos.latitude;
-        longitude = pos.longitude;
+        latitude = pos!.latitude!;
+        longitude = pos.longitude!;
         if (registeredGeofences.isNotEmpty) {
           polyline.points.add(LatLng(latitude, longitude));
           print(

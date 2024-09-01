@@ -21,6 +21,7 @@ static const NSString *kRegionKey = @"region";
 static const NSString *kEventType = @"event_type";
 static const int kEnterEvent = 1;
 static const int kExitEvent = 2;
+static const int kDwellEvent = 4;
 static const NSString *kCallbackMapping = @"geofence_region_callback_mapping";
 static GeofencingPlugin *instance = nil;
 static FlutterPluginRegistrantCallback registerPlugins = nil;
@@ -116,6 +117,36 @@ static BOOL backgroundIsolateRun = NO;
   }
 }
 
+- (void)locationManager:(CLLocationManager *)manager didDetermineState:(CLRegionState)state forRegion:(CLRegion *)region {
+  @synchronized(self) {
+    if (state == CLRegionStateInside) {
+      if (initialized) {
+        [self sendLocationEvent:region eventType:kDwellEvent];
+      } else {
+        NSDictionary *dict = @{
+          kRegionKey: region,
+          kEventType: @(kDwellEvent)
+        };
+        [_eventQueue addObject:dict];
+      }
+    }
+  }
+}
+
+- (void)locationManager:(CLLocationManager *)manager didUpdateLocations:(NSArray *)locations {
+  @synchronized(self) {
+    // TODO: check if current location is inside any geofence
+    // the most recent location is the last element in location array
+    CLLocation* location = locations.lastObject;
+    if (location != nil) {
+      //[self sendLocationEvent:location];
+    }
+  }
+}
+
+- (void)locationManager:(CLLocationManager *)manager didFailWithError:(Error *)error {
+}
+
 - (void)locationManager:(CLLocationManager *)manager
     monitoringDidFailForRegion:(CLRegion *)region
                      withError:(NSError *)error {
@@ -144,6 +175,8 @@ static BOOL backgroundIsolateRun = NO;
   _locationManager = [[CLLocationManager alloc] init];
   [_locationManager setDelegate:self];
   [_locationManager requestAlwaysAuthorization];
+  _locationManager.desiredAccuracy = kCLLocationAccuracyBest;
+  _locationManager.distanceFilter = kCLDistanceFilterNone;
   _locationManager.allowsBackgroundLocationUpdates = YES;
   _locationManager.pausesLocationUpdatesAutomatically = NO;
 
@@ -178,6 +211,8 @@ static BOOL backgroundIsolateRun = NO;
   }
   [_registrar addMethodCallDelegate:self channel:_callbackChannel];
   backgroundIsolateRun = YES;
+
+  [self._locationManager startMonitoringSignificantLocationChanges];
 }
 
 - (void)registerGeofence:(NSArray *)arguments {
@@ -197,6 +232,8 @@ static BOOL backgroundIsolateRun = NO;
   
   [self setCallbackHandleForRegionId:callbackHandle regionId:identifier];
   [self->_locationManager startMonitoringForRegion:region];
+
+  [self->_locationManager requestStateForRegion:region];
 }
 
 - (BOOL)removeGeofence:(NSArray *)arguments {

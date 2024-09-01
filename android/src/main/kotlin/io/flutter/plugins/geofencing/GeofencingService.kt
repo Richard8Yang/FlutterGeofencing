@@ -28,6 +28,7 @@ import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.embedding.engine.dart.DartExecutor.DartCallback
 
 import com.google.android.gms.location.GeofencingEvent
+import com.huawei.hms.location.GeofenceData
 
 class GeofencingService : MethodCallHandler, JobIntentService() {
     private val queue = ArrayDeque<List<Any>>()
@@ -115,37 +116,58 @@ class GeofencingService : MethodCallHandler, JobIntentService() {
     }
 
     override fun onHandleWork(intent: Intent) {
+        val action = intent.getAction()
+        Log.i(TAG, "Intent action: $action")
         val callbackHandle = intent.getLongExtra(GeofencingPlugin.CALLBACK_HANDLE_KEY, 0)
-        val geofencingEvent = GeofencingEvent.fromIntent(intent)
-        if (geofencingEvent.hasError()) {
-            Log.e(TAG, "Geofencing error: ${geofencingEvent.errorCode}")
-            return
-        }
-
-        // Get the transition type.
-        val geofenceTransition = geofencingEvent.geofenceTransition
-
-        // Get the geofences that were triggered. A single event can trigger
-        // multiple geofences.
-        val triggeringGeofences = geofencingEvent.triggeringGeofences.map {
-            it.requestId
-        }
-
-        val location = geofencingEvent.triggeringLocation
-        val locationList = listOf(location.latitude,
-                location.longitude)
-        val geofenceUpdateList = listOf(callbackHandle,
-                triggeringGeofences,
-                locationList,
-                geofenceTransition)
-
-        synchronized(sServiceStarted) {
-            if (!sServiceStarted.get()) {
-                // Queue up geofencing events while background isolate is starting
-                queue.add(geofenceUpdateList)
-            } else {
-                // Callback method name is intentionally left blank.
-                Handler(mContext.mainLooper).post { mBackgroundChannel.invokeMethod("", geofenceUpdateList) }
+        try {
+            val geofencingEvent = GeofencingEvent.fromIntent(intent)
+            if (geofencingEvent != null && geofencingEvent!!.hasError()) {
+                Log.e(TAG, "Geofencing error: ${geofencingEvent.errorCode}")
+                return
+            }
+            // Get the transition type.
+            val geofenceTransition = geofencingEvent!!.geofenceTransition
+            // Get the geofences that were triggered. A single event can trigger
+            // multiple geofences.
+            val triggeringGeofences = geofencingEvent!!.triggeringGeofences!!.map {
+                it.requestId
+            }
+            val location = geofencingEvent.triggeringLocation
+            val locationList = listOf(location!!.latitude, location!!.longitude)
+            val geofenceUpdateList = listOf(callbackHandle,
+                    triggeringGeofences,
+                    locationList,
+                    geofenceTransition)
+            synchronized(sServiceStarted) {
+                if (!sServiceStarted.get()) {
+                    // Queue up geofencing events while background isolate is starting
+                    queue.add(geofenceUpdateList)
+                } else {
+                    // Callback method name is intentionally left blank.
+                    Handler(mContext.mainLooper).post { mBackgroundChannel.invokeMethod("", geofenceUpdateList) }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling geofencing event through GMS, try HMS")
+            val geofenceData = GeofenceData.getDataFromIntent(intent)
+            if (geofenceData != null && geofenceData!!.getErrorCode() == 0) {
+                val transitionType = geofenceData!!.getConversion()
+                var fences = geofenceData!!.getConvertingGeofenceList().map {
+                    it.getUniqueId()
+                }
+                val location = geofenceData!!.getConvertingLocation()
+                val locationList = listOf(location!!.latitude, location!!.longitude)
+                val geofenceUpdateList = listOf(callbackHandle, fences, locationList, transitionType)
+                Log.i(TAG, "Geofence event update: $geofenceUpdateList")
+                synchronized(sServiceStarted) {
+                    if (!sServiceStarted.get()) {
+                        // Queue up geofencing events while background isolate is starting
+                        queue.add(geofenceUpdateList)
+                    } else {
+                        // Callback method name is intentionally left blank.
+                        Handler(mContext.mainLooper).post { mBackgroundChannel.invokeMethod("", geofenceUpdateList) }
+                    }
+                }
             }
         }
     }

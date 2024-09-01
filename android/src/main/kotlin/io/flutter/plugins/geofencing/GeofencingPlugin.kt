@@ -16,6 +16,11 @@ import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofencingClient
 import com.google.android.gms.location.GeofencingRequest
 import com.google.android.gms.location.LocationServices
+import com.huawei.hms.location.Geofence as HMSGeofence
+import com.huawei.hms.location.GeofenceService as HMSGeofenceService
+import com.huawei.hms.location.LocationServices as HMSLocationServices
+import com.huawei.hms.location.GeofenceRequest as HMSGeofenceRequest
+import com.huawei.hmf.tasks.OnCompleteListener
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -30,6 +35,10 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
   private var mContext : Context? = null
   private var mActivity : Activity? = null
   private var mGeofencingClient : GeofencingClient? = null
+  private var mHmsGeofenceSvc : HMSGeofenceService? = null
+
+  val geofenceClientGMS: GeofencingClient get() = mGeofencingClient!!
+  val geofenceClientHMS: HMSGeofenceService get() = mHmsGeofenceSvc!!
 
   companion object {
     @JvmStatic
@@ -65,18 +74,17 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
           for (i in 0 until gfArgs.length()) {
             list.add(gfArgs.get(i) as Object)
           }
-          val geoClient = LocationServices.getGeofencingClient(context)
-          registerGeofence(context, geoClient, list, null, false)
+          registerGeofence(context, list, null, false)
         }
       }
     }
 
     @JvmStatic
     private fun registerGeofence(context: Context,
-                                 geofencingClient: GeofencingClient,
-                                 args: ArrayList<*>?,
-                                 result: Result?,
-                                 cache: Boolean) {
+                                  args: ArrayList<*>?,
+                                  result: Result?,
+                                  cache: Boolean,
+                                  thisPtr: GeofencingPlugin? = null) {
       val callbackHandle = args!![0] as Long
       val id = args[1] as String
       val lat = args[2] as Double
@@ -87,14 +95,7 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
       val expirationDuration = (args[7] as Int).toLong()
       val loiteringDelay = args[8] as Int
       val notificationResponsiveness = args[9] as Int
-      val geofence = Geofence.Builder()
-              .setRequestId(id)
-              .setCircularRegion(lat, long, radius)
-              .setTransitionTypes(fenceTriggers)
-              .setLoiteringDelay(loiteringDelay)
-              .setNotificationResponsiveness(notificationResponsiveness)
-              .setExpirationDuration(expirationDuration)
-              .build()
+
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
               (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                       == PackageManager.PERMISSION_DENIED)) {
@@ -102,8 +103,19 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
         Log.w(TAG, msg)
         result?.error(msg, null, null)
       }
-      geofencingClient.addGeofences(getGeofencingRequest(geofence, initialTriggers),
-              getGeofencePendingIndent(context, callbackHandle))?.run {
+
+      // try with GMS location service
+      val geoFenceClient = if (thisPtr == null) LocationServices.getGeofencingClient(context) else thisPtr.geofenceClientGMS
+      val geofence = Geofence.Builder()
+                    .setRequestId(id)
+                    .setCircularRegion(lat, long, radius)
+                    .setTransitionTypes(fenceTriggers)
+                    .setLoiteringDelay(loiteringDelay)
+                    .setNotificationResponsiveness(notificationResponsiveness)
+                    .setExpirationDuration(expirationDuration)
+                    .build()
+        geoFenceClient.addGeofences(getGeofencingRequest(geofence, initialTriggers),
+              getGeofencePendingIntent(context, callbackHandle))?.run {
         addOnSuccessListener {
           Log.i(TAG, "Successfully added geofence")
           if (cache) {
@@ -112,8 +124,32 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
           result?.success(true)
         }
         addOnFailureListener {
-          Log.e(TAG, "Failed to add geofence: $it")
-          result?.error(it.toString(), null, null)
+          Log.e(TAG, "Failed to add geofence through GMS location service: $it, retry with HMS location service")
+          val geoFenceClientHMS = if (thisPtr == null) HMSLocationServices.getGeofenceService(context) else thisPtr.geofenceClientHMS
+          val geoFenceHMS = HMSGeofence.Builder()
+                        .setUniqueId(id)
+                        .setValidContinueTime(expirationDuration)
+                        .setRoundArea(lat, long, radius)
+                        .setConversions(fenceTriggers)
+                        .setDwellDelayTime(loiteringDelay)
+                        .setNotificationInterval(notificationResponsiveness)
+                        .build();
+          val builder = HMSGeofenceRequest.Builder();
+          builder.setInitConversions(initialTriggers);
+          builder.createGeofence(geoFenceHMS);
+          geoFenceClientHMS.createGeofenceList(builder.build(), getGeofencePendingIntent(context, callbackHandle))
+            .addOnCompleteListener(OnCompleteListener<Void?> { task ->
+            if (task.isSuccessful()) {
+              Log.i(TAG, "add geofence success！");
+              if (cache) {
+                addGeofenceToCache(context, id, args)
+              }
+              result?.success(true)
+            } else {
+              Log.e(TAG, "Failed to add geofence: ${task.exception}")
+              result?.error(task.exception.toString(), null, null)
+            }
+          })
         }
       }
     }
@@ -138,7 +174,6 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
       }
     }
 
-
     @JvmStatic
     private fun initializeService(context: Context, args: ArrayList<*>?) {
       Log.d(TAG, "Initializing GeofencingService")
@@ -158,7 +193,7 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
     }
 
     @JvmStatic
-    private fun getGeofencePendingIndent(context: Context, callbackHandle: Long): PendingIntent {
+    private fun getGeofencePendingIntent(context: Context, callbackHandle: Long): PendingIntent {
       val intent = Intent(context, GeofencingBroadcastReceiver::class.java)
               .putExtra(CALLBACK_HANDLE_KEY, callbackHandle)
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -170,11 +205,12 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
 
     @JvmStatic
     private fun removeGeofence(context: Context,
-                               geofencingClient: GeofencingClient,
-                               args: ArrayList<*>?,
-                               result: Result) {
+                                args: ArrayList<*>?,
+                                result: Result,
+                                thisPtr: GeofencingPlugin? = null) {
       val ids = listOf(args!![0] as String)
-      geofencingClient.removeGeofences(ids).run {
+      val geoFenceClient = if (thisPtr == null) LocationServices.getGeofencingClient(context) else thisPtr.geofenceClientGMS
+      geoFenceClient.removeGeofences(ids).run {
         addOnSuccessListener {
           for (id in ids) {
             removeGeofenceFromCache(context, id)
@@ -182,7 +218,20 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
           result.success(true)
         }
         addOnFailureListener {
-          result.error(it.toString(), null, null)
+          Log.e(TAG, "Failed to remove geofence through GMS location service: $it, retry with HMS location service")
+          val geoFenceClientHMS = if (thisPtr == null) HMSLocationServices.getGeofenceService(context) else thisPtr.geofenceClientHMS
+          geoFenceClientHMS.deleteGeofenceList(ids).addOnCompleteListener(OnCompleteListener<Void?> { task ->
+            if (task.isSuccessful()) {
+              Log.i(TAG, "remove geofence success！");
+              for (id in ids) {
+                removeGeofenceFromCache(context, id)
+              }
+              result?.success(true)
+            } else {
+              Log.e(TAG, "Failed to remove geofence: ${task.exception}")
+              result?.error(task.exception.toString(), null, null)
+            }
+          })
         }
       }
     }
@@ -228,6 +277,7 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
   override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     mContext = binding.getApplicationContext()
     mGeofencingClient = LocationServices.getGeofencingClient(mContext!!)
+    mHmsGeofenceSvc = HMSLocationServices.getGeofenceService(mContext!!)
     val channel = MethodChannel(binding.getBinaryMessenger(), "plugins.flutter.io/geofencing_plugin")
     channel.setMethodCallHandler(this)
   }
@@ -235,6 +285,7 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
   override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
     mContext = null
     mGeofencingClient = null
+    mHmsGeofenceSvc = null
   }
 
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
@@ -266,12 +317,10 @@ class GeofencingPlugin : ActivityAware, FlutterPlugin, MethodCallHandler {
         result.success(true)
       }
       "GeofencingPlugin.registerGeofence" -> registerGeofence(mContext!!,
-              mGeofencingClient!!,
               args,
               result,
               true)
       "GeofencingPlugin.removeGeofence" -> removeGeofence(mContext!!,
-              mGeofencingClient!!,
               args,
               result)
       "GeofencingPlugin.getRegisteredGeofenceIds" -> getRegisteredGeofenceIds(mContext!!, result)
