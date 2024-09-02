@@ -116,8 +116,6 @@ class GeofencingService : MethodCallHandler, JobIntentService() {
     }
 
     override fun onHandleWork(intent: Intent) {
-        val action = intent.getAction()
-        Log.i(TAG, "Intent action: $action")
         val callbackHandle = intent.getLongExtra(GeofencingPlugin.CALLBACK_HANDLE_KEY, 0)
         try {
             val geofencingEvent = GeofencingEvent.fromIntent(intent)
@@ -158,7 +156,6 @@ class GeofencingService : MethodCallHandler, JobIntentService() {
                 val location = geofenceData!!.getConvertingLocation()
                 val locationList = listOf(location!!.latitude, location!!.longitude)
                 val geofenceUpdateList = listOf(callbackHandle, fences, locationList, transitionType)
-                Log.i(TAG, "Geofence event update: $geofenceUpdateList")
                 synchronized(sServiceStarted) {
                     if (!sServiceStarted.get()) {
                         // Queue up geofencing events while background isolate is starting
