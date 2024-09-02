@@ -121,9 +121,9 @@ class GeofencingService : MethodCallHandler, JobIntentService() {
         val callbackHandle = intent.getLongExtra(GeofencingPlugin.CALLBACK_HANDLE_KEY, 0)
         try {
             val geofencingEvent = GeofencingEvent.fromIntent(intent)
-            if (geofencingEvent != null && geofencingEvent!!.hasError()) {
-                Log.e(TAG, "Geofencing error: ${geofencingEvent.errorCode}")
-                return
+            if (geofencingEvent == null || (geofencingEvent != null && geofencingEvent!!.hasError())) {
+                Log.e(TAG, "Failed to get GMS geofence event, try HMS")
+                throw UnsupportedOperationException()
             }
             // Get the transition type.
             val geofenceTransition = geofencingEvent!!.geofenceTransition
@@ -150,7 +150,7 @@ class GeofencingService : MethodCallHandler, JobIntentService() {
         } catch (e: Exception) {
             Log.e(TAG, "Error handling geofencing event through GMS, try HMS")
             val geofenceData = GeofenceData.getDataFromIntent(intent)
-            if (geofenceData != null && geofenceData!!.getErrorCode() == 0) {
+            if (geofenceData != null && geofenceData!!.isSuccess()) {
                 val transitionType = geofenceData!!.getConversion()
                 var fences = geofenceData!!.getConvertingGeofenceList().map {
                     it.getUniqueId()

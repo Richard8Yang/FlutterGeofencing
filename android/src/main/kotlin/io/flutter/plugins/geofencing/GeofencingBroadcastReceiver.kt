@@ -10,7 +10,6 @@ import android.content.Intent
 import android.util.Log
 import io.flutter.view.FlutterMain
 
-
 class GeofencingBroadcastReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "GeofencingBroadcastReceiver"
