@@ -140,6 +140,22 @@ static BOOL backgroundIsolateRun = NO;
     CLLocation* location = locations.lastObject;
     if (location != nil) {
       //[self sendLocationEvent:location];
+      for (CLRegion *region in [self->_locationManager monitoredRegions]) {
+        if ([region isKindOfClass:[CLCircularRegion class]]) {
+          CLCircularRegion *circleRegion = (CLCircularRegion *)region;
+          if ([circleRegion containsCoordinate:location.coordinate]) {
+            if (initialized) {
+              [self sendLocationEvent:region eventType:kDwellEvent];
+            } else {
+              NSDictionary *dict = @{
+                kRegionKey: region,
+                kEventType: @(kDwellEvent)
+              };
+              [_eventQueue addObject:dict];
+            }
+          }
+        }
+      }
     }
   }
 }
