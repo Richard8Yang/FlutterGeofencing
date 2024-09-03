@@ -144,7 +144,7 @@ static BOOL backgroundIsolateRun = NO;
   }
 }
 
-- (void)locationManager:(CLLocationManager *)manager didFailWithError:(Error *)error {
+- (void)locationManager:(CLLocationManager *)manager didFailWithError:(NSError *)error {
 }
 
 - (void)locationManager:(CLLocationManager *)manager
@@ -212,7 +212,7 @@ static BOOL backgroundIsolateRun = NO;
   [_registrar addMethodCallDelegate:self channel:_callbackChannel];
   backgroundIsolateRun = YES;
 
-  [self._locationManager startMonitoringSignificantLocationChanges];
+  [self->_locationManager startMonitoringSignificantLocationChanges];
 }
 
 - (void)registerGeofence:(NSArray *)arguments {
