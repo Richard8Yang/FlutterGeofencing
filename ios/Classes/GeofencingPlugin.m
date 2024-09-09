@@ -135,7 +135,7 @@ static BOOL backgroundIsolateRun = NO;
 
 - (void)locationManager:(CLLocationManager *)manager didUpdateLocations:(NSArray *)locations {
   @synchronized(self) {
-    // TODO: check if current location is inside any geofence
+    // check if current location is inside any geofence
     // the most recent location is the last element in location array
     CLLocation* location = locations.lastObject;
     if (location != nil) {
@@ -153,6 +153,8 @@ static BOOL backgroundIsolateRun = NO;
               };
               [_eventQueue addObject:dict];
             }
+          } else {
+            [self->_locationManager requestStateForRegion:region];
           }
         }
       }
