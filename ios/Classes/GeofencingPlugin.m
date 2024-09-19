@@ -155,6 +155,16 @@ static BOOL backgroundIsolateRun = NO;
             }
           } else {
             [self->_locationManager requestStateForRegion:region];
+
+            if (initialized) {
+              [self sendLocationEvent:region eventType:kExitEvent];
+            } else {
+              NSDictionary *dict = @{
+                kRegionKey: region,
+                kEventType: @(kExitEvent)
+              };
+              [_eventQueue addObject:dict];
+            }
           }
         }
       }
