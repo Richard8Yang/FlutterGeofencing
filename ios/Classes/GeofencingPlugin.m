@@ -154,8 +154,6 @@ static BOOL backgroundIsolateRun = NO;
               [_eventQueue addObject:dict];
             }
           } else {
-            [self->_locationManager requestStateForRegion:region];
-
             if (initialized) {
               [self sendLocationEvent:region eventType:kExitEvent];
             } else {
@@ -165,6 +163,7 @@ static BOOL backgroundIsolateRun = NO;
               };
               [_eventQueue addObject:dict];
             }
+            [self->_locationManager requestStateForRegion:region];
           }
         }
       }
