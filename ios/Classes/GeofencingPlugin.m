@@ -19,6 +19,7 @@
 
 static const NSString *kRegionKey = @"region";
 static const NSString *kEventType = @"event_type";
+static const NSString *kEventSource = @"event_source";
 static const int kEnterEvent = 1;
 static const int kExitEvent = 2;
 static const int kDwellEvent = 4;
@@ -59,7 +60,8 @@ static BOOL backgroundIsolateRun = NO;
             [_eventQueue removeObjectAtIndex:0];
             CLRegion* region = [event objectForKey:kRegionKey];
             int type = [[event objectForKey:kEventType] intValue];
-            [self sendLocationEvent:region eventType: type];
+            int source = [[event objectForKey:kEventSource] intValue];
+            [self sendLocationEvent:region eventType: type source: source];
         }
     }
     result(nil);
@@ -92,11 +94,12 @@ static BOOL backgroundIsolateRun = NO;
 - (void)locationManager:(CLLocationManager *)manager didEnterRegion:(CLRegion *)region {
   @synchronized(self) {
     if (initialized) {
-      [self sendLocationEvent:region eventType:kEnterEvent];
+      [self sendLocationEvent:region eventType:kEnterEvent source: 1];
     } else {
       NSDictionary *dict = @{
         kRegionKey: region,
-        kEventType: @(kEnterEvent)
+        kEventType: @(kEnterEvent),
+        kEventSource: @1
       };
       [_eventQueue addObject:dict];
     }
@@ -106,11 +109,12 @@ static BOOL backgroundIsolateRun = NO;
 - (void)locationManager:(CLLocationManager *)manager didExitRegion:(CLRegion *)region {
   @synchronized(self) {
     if (initialized) {
-      [self sendLocationEvent:region eventType:kExitEvent];
+      [self sendLocationEvent:region eventType:kExitEvent source: 1];
     } else {
       NSDictionary *dict = @{
         kRegionKey: region,
-        kEventType: @(kExitEvent)
+        kEventType: @(kExitEvent),
+        kEventSource: @1
       };
       [_eventQueue addObject:dict];
     }
@@ -121,11 +125,12 @@ static BOOL backgroundIsolateRun = NO;
   @synchronized(self) {
     if (state == CLRegionStateInside) {
       if (initialized) {
-        [self sendLocationEvent:region eventType:kDwellEvent];
+        [self sendLocationEvent:region eventType:kDwellEvent source: 2];
       } else {
         NSDictionary *dict = @{
           kRegionKey: region,
-          kEventType: @(kDwellEvent)
+          kEventType: @(kDwellEvent),
+          kEventSource: @2
         };
         [_eventQueue addObject:dict];
       }
@@ -145,26 +150,28 @@ static BOOL backgroundIsolateRun = NO;
           CLCircularRegion *circleRegion = (CLCircularRegion *)region;
           if ([circleRegion containsCoordinate:location.coordinate]) {
             if (initialized) {
-              [self sendLocationEvent:region eventType:kDwellEvent];
+              [self sendLocationEvent:region eventType:kDwellEvent source: 3];
             } else {
               NSDictionary *dict = @{
                 kRegionKey: region,
-                kEventType: @(kDwellEvent)
+                kEventType: @(kDwellEvent),
+                kEventSource: @3
               };
               [_eventQueue addObject:dict];
             }
           } else {
             if (initialized) {
-              [self sendLocationEvent:region eventType:kExitEvent];
+              [self sendLocationEvent:region eventType:kExitEvent source: 3];
             } else {
               NSDictionary *dict = @{
                 kRegionKey: region,
-                kEventType: @(kExitEvent)
+                kEventType: @(kExitEvent),
+                kEventSource: @3
               };
               [_eventQueue addObject:dict];
             }
-            [self->_locationManager requestStateForRegion:region];
           }
+          [self->_locationManager requestStateForRegion:region];
         }
       }
     }
@@ -181,7 +188,7 @@ static BOOL backgroundIsolateRun = NO;
 
 #pragma mark GeofencingPlugin Methods
 
-- (void)sendLocationEvent:(CLRegion *)region eventType:(int)event {
+- (void)sendLocationEvent:(CLRegion *)region eventType:(int)event source:(int)source {
   NSAssert([region isKindOfClass:[CLCircularRegion class]], @"region must be CLCircularRegion");
   CLLocationCoordinate2D center = region.center;
   int64_t handle = [self getCallbackHandleForRegionId:region.identifier];
@@ -189,7 +196,7 @@ static BOOL backgroundIsolateRun = NO;
       [_callbackChannel
        invokeMethod:@""
         arguments:@[
-            @(handle), @[ region.identifier ], @[ @(center.latitude), @(center.longitude) ], @(event)
+            @(handle), @[ region.identifier ], @[ @(center.latitude), @(center.longitude) ], @(event), @(source)
         ]];
   }
 }

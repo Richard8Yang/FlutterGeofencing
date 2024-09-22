@@ -30,7 +30,7 @@ void callbackDispatcher() {
         .forEach((dynamic e) => locationList.add(double.parse(e.toString())));
     final Location triggeringLocation = locationFromList(locationList);
     final GeofenceEvent event = intToGeofenceEvent(args[3]);
-    callback!(triggeringGeofences, triggeringLocation, event);
+    callback!(triggeringGeofences, triggeringLocation, event, args[4]);
   });
   _backgroundChannel.invokeMethod('GeofencingService.initialized');
 }

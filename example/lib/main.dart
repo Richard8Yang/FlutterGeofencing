@@ -126,7 +126,7 @@ class _MyAppState extends State<MyApp> {
   }
 
   @pragma('vm:entry-point')
-  static void callback(List<String> ids, Location l, GeofenceEvent e) async {
+  static void callback(List<String> ids, Location l, GeofenceEvent e, int source) async {
     print('Fences: $ids Location $l Event: $e');
     final send = IsolateNameServer.lookupPortByName('geofencing_send_port');
     final data = {

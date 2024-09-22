@@ -133,7 +133,7 @@ class GeofencingManager {
   /// `GeofenceEvent.dwell` trigger on iOS, `UnsupportedError` is thrown.
   static Future<void> registerGeofence(
       GeofenceRegion region,
-      void Function(List<String> id, Location location, GeofenceEvent event)
+      void Function(List<String> id, Location location, GeofenceEvent event, int source)
           callback) async {
     if (Platform.isIOS &&
         region.triggers.contains(GeofenceEvent.dwell) &&
