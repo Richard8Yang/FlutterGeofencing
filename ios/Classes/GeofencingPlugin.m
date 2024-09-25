@@ -71,7 +71,7 @@ static BOOL backgroundIsolateRun = NO;
   } else if ([@"GeofencingPlugin.removeGeofence" isEqualToString:call.method]) {
     result(@([self removeGeofence:arguments]));
   } else if ([@"GeofencingPlugin.getRegisteredGeofenceIds" isEqualToString:call.method]) {
-      result([self getMonitoredRegionIds:arguments]);
+    result([self getMonitoredRegionIds:arguments]);
   }
   else {
     result(FlutterMethodNotImplemented);
@@ -160,7 +160,7 @@ static BOOL backgroundIsolateRun = NO;
               [_eventQueue addObject:dict];
             }
           } else {
-            if (initialized) {
+            /*if (initialized) {
               [self sendLocationEvent:region eventType:kExitEvent source: 3];
             } else {
               NSDictionary *dict = @{
@@ -169,7 +169,7 @@ static BOOL backgroundIsolateRun = NO;
                 kEventSource: @3
               };
               [_eventQueue addObject:dict];
-            }
+            }*/
           }
           [self->_locationManager requestStateForRegion:region];
         }
