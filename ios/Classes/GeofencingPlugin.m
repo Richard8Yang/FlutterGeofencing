@@ -143,10 +143,24 @@ static BOOL backgroundIsolateRun = NO;
     // check if current location is inside any geofence
     // the most recent location is the last element in location array
     CLLocation* location = locations.lastObject;
+    int sendLocationUpdate = 1;
     if (location != nil) {
-      //[self sendLocationEvent:location];
       for (CLRegion *region in [self->_locationManager monitoredRegions]) {
         if ([region isKindOfClass:[CLCircularRegion class]]) {
+          // Send location update message first
+          if (sendLocationUpdate > 0) {
+            sendLocationUpdate = 0;
+            int64_t handle = [self getCallbackHandleForRegionId:region.identifier];
+            if (handle != 0 && _callbackChannel != nil) {
+              [_callbackChannel
+              invokeMethod:@""
+                arguments:@[
+                    @(handle), @[@"SignificantLocationUpdate"], @[ @(location.coordinate.latitude), @(location.coordinate.longitude) ], @(kDwellEvent), @(3)
+                ]
+              ];
+            }
+          }
+          // Check and send geofence event if any
           CLCircularRegion *circleRegion = (CLCircularRegion *)region;
           if ([circleRegion containsCoordinate:location.coordinate]) {
             if (initialized) {
