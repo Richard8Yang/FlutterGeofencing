@@ -185,7 +185,7 @@ static BOOL backgroundIsolateRun = NO;
               [_eventQueue addObject:dict];
             }*/
           }
-          [self->_locationManager requestStateForRegion:region];
+          //[self->_locationManager requestStateForRegion:region];
         }
       }
     }
